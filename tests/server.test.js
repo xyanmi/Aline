@@ -5,6 +5,11 @@ const serverPath = require.resolve('../src/daemon/server');
 const rsyncPath = require.resolve('../src/sync/rsync');
 const watcherPath = require.resolve('../src/sync/watcher');
 
+const EXAMPLE_HOST = 'example-host';
+const EXAMPLE_HOST_TYPO = 'example-host-typo';
+const EXAMPLE_HOME = '/home/remote-user';
+const EXAMPLE_CONDA_INIT = `${EXAMPLE_HOME}/miniconda3/etc/profile.d/conda.sh`;
+
 function createFakeExecStream({ stdout = [], stderr = [] } = {}) {
   const listeners = new Map();
   const stderrListeners = new Map();
@@ -120,11 +125,48 @@ function loadServer({ rsyncExports, watcherExports, sshManagerExports } = {}) {
   };
 }
 
+test('unwrapAuthenticatedRequest accepts a valid request envelope', () => {
+  const { server, restore } = loadServer();
+
+  try {
+    assert.deepEqual(
+      server.unwrapAuthenticatedRequest({ token: 'secret', request: { action: 'connection.list' } }, 'secret'),
+      { action: 'connection.list' },
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('unwrapAuthenticatedRequest rejects missing or invalid tokens', () => {
+  const { server, restore } = loadServer();
+
+  try {
+    assert.equal(server.unwrapAuthenticatedRequest({ request: { action: 'connection.list' } }, 'secret'), null);
+    assert.equal(server.unwrapAuthenticatedRequest({ token: 'wrong', request: { action: 'connection.list' } }, 'secret'), null);
+    assert.equal(server.unwrapAuthenticatedRequest({ token: 'secret' }, 'secret'), null);
+  } finally {
+    restore();
+  }
+});
+
+test('unwrapAuthenticatedRequest allows bare requests when no token is configured', () => {
+  const { server, restore } = loadServer();
+
+  try {
+    const request = { action: 'connection.list' };
+    assert.equal(server.unwrapAuthenticatedRequest(request, null), request);
+  } finally {
+    restore();
+  }
+});
+
+
 test('handleRequest returns unknown action failure', async () => {
   const { server, restore } = loadServer();
 
   try {
-    const result = await server.handleRequest({ action: 'missing', host: 'yantw-novpn' });
+    const result = await server.handleRequest({ action: 'missing', host: EXAMPLE_HOST });
     assert.equal(result.status, 'error');
     assert.equal(result.error.code, 'UNKNOWN_ACTION');
   } finally {
@@ -136,14 +178,14 @@ test('handleRequest supports channel add/list/log without ssh', async () => {
   const { server, restore } = loadServer();
 
   try {
-    const add = await server.handleRequest({ action: 'channel.add', host: 'yantw-novpn', payload: { name: 'test-ch' } });
+    const add = await server.handleRequest({ action: 'channel.add', host: EXAMPLE_HOST, payload: { name: 'test-ch' } });
     assert.equal(add.status, 'success');
 
-    const list = await server.handleRequest({ action: 'channel.list', host: 'yantw-novpn' });
+    const list = await server.handleRequest({ action: 'channel.list', host: EXAMPLE_HOST });
     assert.equal(list.status, 'success');
     assert.equal(list.data.length >= 1, true);
 
-    const log = await server.handleRequest({ action: 'log', host: 'yantw-novpn', payload: { channel: 'test-ch', tail: 20 } });
+    const log = await server.handleRequest({ action: 'log', host: EXAMPLE_HOST, payload: { channel: 'test-ch', tail: 20 } });
     assert.equal(log.status, 'success');
     assert.equal(log.data.channel, 'test-ch');
     assert.deepEqual(log.data.history, []);
@@ -154,10 +196,12 @@ test('handleRequest supports channel add/list/log without ssh', async () => {
 
 test('handleRequest log returns command history and current output', async () => {
   class FakeSSHManager {
-    constructor() {}
-
     async connect() {
       return { end() {} };
+    }
+
+    isConnected() {
+      return true;
     }
 
     async exec(host, command) {
@@ -242,7 +286,7 @@ test('handleRequest log returns command history and current output', async () =>
   try {
     const firstExec = await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'ls' },
     });
 
@@ -252,7 +296,7 @@ test('handleRequest log returns command history and current output', async () =>
 
     const secondExec = await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'tail -f app.log' },
     });
 
@@ -260,7 +304,7 @@ test('handleRequest log returns command history and current output', async () =>
 
     await new Promise((resolve) => setImmediate(resolve));
 
-    const log = await server.handleRequest({ action: 'log', host: 'yantw-novpn', payload: { channel: 'test', tail: 100 } });
+    const log = await server.handleRequest({ action: 'log', host: EXAMPLE_HOST, payload: { channel: 'test', tail: 100 } });
     assert.equal(log.status, 'success');
     assert.equal(log.data.currentCommand, 'tail -f app.log');
     assert.equal(log.data.currentExecutionId, secondExec.data.executionId);
@@ -275,13 +319,13 @@ test('handleRequest log returns command history and current output', async () =>
         id: firstExec.data.executionId,
         command: 'ls',
         status: 'COMPLETED',
-        output: 'file-a\nfile-b\n',
+        output: 'file-a\nfile-b',
       },
       {
         id: secondExec.data.executionId,
         command: 'tail -f app.log',
         status: 'RUNNING',
-        output: 'tick-1\ntick-2\n',
+        output: 'tick-1\ntick-2',
       },
     ]);
     assert.match(log.data.logs, /\$ ls/);
@@ -296,12 +340,16 @@ test('handleRequest exec reuses shell state inside a channel', async () => {
   class FakeSSHManager {
     constructor() {
       this.shellSessionCount = 0;
-      this.cwd = '/home/wu_2';
+      this.cwd = EXAMPLE_HOME;
       this.condaEnv = null;
     }
 
     async connect() {
       return { end() {} };
+    }
+
+    isConnected() {
+      return true;
     }
 
     async exec() {
@@ -315,9 +363,11 @@ test('handleRequest exec reuses shell state inside a channel', async () => {
       let stderrHandler = () => {};
       let closeHandler = () => {};
 
+      const condaCommand = `. ${EXAMPLE_CONDA_INIT} && conda activate tensor`;
+
       const runCommand = (command) => {
         if (command === 'cd aline-test') {
-          this.cwd = '/home/wu_2/aline-test';
+          this.cwd = `${EXAMPLE_HOME}/aline-test`;
           return { stdout: '', stderr: '', exitCode: 0 };
         }
 
@@ -325,7 +375,7 @@ test('handleRequest exec reuses shell state inside a channel', async () => {
           return { stdout: `${this.cwd}\n`, stderr: '', exitCode: 0 };
         }
 
-        if (command === '. /home/wu_2/miniconda3/etc/profile.d/conda.sh && conda activate tensor') {
+        if (command === condaCommand) {
           this.condaEnv = 'tensor';
           return { stdout: '', stderr: '', exitCode: 0 };
         }
@@ -392,43 +442,43 @@ test('handleRequest exec reuses shell state inside a channel', async () => {
   try {
     await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'cd aline-test' },
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
-      payload: { channel: 'test', cmd: '. /home/wu_2/miniconda3/etc/profile.d/conda.sh && conda activate tensor' },
+      host: EXAMPLE_HOST,
+      payload: { channel: 'test', cmd: `. ${EXAMPLE_CONDA_INIT} && conda activate tensor` },
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'pwd' },
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'echo $CONDA_DEFAULT_ENV' },
     });
     await new Promise((resolve) => setImmediate(resolve));
 
     const log = await server.handleRequest({
       action: 'log',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', tail: 200 },
     });
 
     assert.equal(log.status, 'success');
     assert.equal(log.data.history.length, 4);
-    assert.equal(log.data.history[2].output, '/home/wu_2/aline-test\n');
-    assert.equal(log.data.history[3].output, 'tensor\n');
-    assert.match(log.data.logs, /\/home\/wu_2\/aline-test/);
+    assert.equal(log.data.history[2].output, `${EXAMPLE_HOME}/aline-test`);
+    assert.equal(log.data.history[3].output, 'tensor');
+    assert.match(log.data.logs, /\/home\/remote-user\/aline-test/);
     assert.match(log.data.logs, /tensor/);
   } finally {
     restore();
@@ -439,15 +489,15 @@ test('handleRequest log returns candidate hosts when channel exists elsewhere', 
   const { server, restore } = loadServer();
 
   try {
-    await server.handleRequest({ action: 'channel.add', host: 'yantw-novpn', payload: { name: 'test' } });
+    await server.handleRequest({ action: 'channel.add', host: EXAMPLE_HOST, payload: { name: 'test' } });
 
-    const log = await server.handleRequest({ action: 'log', host: 'yantw-novp', payload: { channel: 'test', tail: 20 } });
+    const log = await server.handleRequest({ action: 'log', host: EXAMPLE_HOST_TYPO, payload: { channel: 'test', tail: 20 } });
     assert.equal(log.status, 'error');
     assert.equal(log.error.code, 'CHANNEL_NOT_FOUND');
     assert.deepEqual(log.error.details, {
       channel: 'test',
-      host: 'yantw-novp',
-      candidateHosts: ['yantw-novpn'],
+      host: EXAMPLE_HOST_TYPO,
+      candidateHosts: [EXAMPLE_HOST],
     });
   } finally {
     restore();
@@ -494,16 +544,16 @@ test('handleRequest push delegates mode to pushPath', async () => {
   });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
 
     const result = await server.handleRequest({
       action: 'push',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { localPath: './local', remotePath: '/remote', mode: 'merge' },
     });
 
     assert.equal(result.status, 'success');
-    assert.deepEqual(pushCall, ['yantw-novpn', './local', '/remote', { mode: 'merge' }]);
+    assert.deepEqual(pushCall, [EXAMPLE_HOST, './local', '/remote', { mode: 'merge' }]);
     assert.deepEqual(result.data, { stdout: 'push ok', stderr: '' });
   } finally {
     restore();
@@ -550,16 +600,16 @@ test('handleRequest push defaults to mirror mode when mode is omitted', async ()
   });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
 
     const result = await server.handleRequest({
       action: 'push',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { localPath: './local', remotePath: '/remote' },
     });
 
     assert.equal(result.status, 'success');
-    assert.deepEqual(pushCall, ['yantw-novpn', './local', '/remote', { mode: undefined }]);
+    assert.deepEqual(pushCall, [EXAMPLE_HOST, './local', '/remote', { mode: undefined }]);
     assert.deepEqual(result.data, { stdout: 'push ok', stderr: '' });
   } finally {
     restore();
@@ -606,16 +656,16 @@ test('handleRequest pull delegates mode to pullPath', async () => {
   });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
 
     const result = await server.handleRequest({
       action: 'pull',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { localPath: './local', remotePath: '/remote', mode: 'merge' },
     });
 
     assert.equal(result.status, 'success');
-    assert.deepEqual(pullCall, ['yantw-novpn', '/remote', './local', { mode: 'merge' }]);
+    assert.deepEqual(pullCall, [EXAMPLE_HOST, '/remote', './local', { mode: 'merge' }]);
     assert.deepEqual(result.data, { stdout: 'pull ok', stderr: '' });
   } finally {
     restore();
@@ -662,16 +712,16 @@ test('handleRequest pull defaults to mirror mode when mode is omitted', async ()
   });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
 
     const result = await server.handleRequest({
       action: 'pull',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { localPath: './local', remotePath: '/remote' },
     });
 
     assert.equal(result.status, 'success');
-    assert.deepEqual(pullCall, ['yantw-novpn', '/remote', './local', { mode: undefined }]);
+    assert.deepEqual(pullCall, [EXAMPLE_HOST, '/remote', './local', { mode: undefined }]);
     assert.deepEqual(result.data, { stdout: 'pull ok', stderr: '' });
   } finally {
     restore();
@@ -743,17 +793,17 @@ test('handleRequest sync.start passes mode to pushPath', async () => {
   });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
 
     const start = await server.handleRequest({
       action: 'sync.start',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { localPath: './workspace', remotePath: '/srv/workspace', mode: 'merge' },
     });
 
     assert.equal(start.status, 'success');
     assert.equal(watcherInstances.length, 1);
-    assert.deepEqual(pushCalls, [['yantw-novpn', './workspace', '/srv/workspace', { mode: 'merge' }]]);
+    assert.deepEqual(pushCalls, [[EXAMPLE_HOST, './workspace', '/srv/workspace', { mode: 'merge' }]]);
   } finally {
     restore();
   }
@@ -818,22 +868,22 @@ test('handleRequest sync.start performs initial push and sync.stop stops watcher
   });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
 
     const start = await server.handleRequest({
       action: 'sync.start',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { localPath: './workspace', remotePath: '/srv/workspace' },
     });
 
     assert.equal(start.status, 'success');
     assert.equal(watcherInstances.length, 1);
     assert.equal(watcherInstances[0].started, './workspace');
-    assert.deepEqual(pushCalls, [['yantw-novpn', './workspace', '/srv/workspace', { mode: undefined }]]);
+    assert.deepEqual(pushCalls, [[EXAMPLE_HOST, './workspace', '/srv/workspace', { mode: undefined }]]);
 
     const stop = await server.handleRequest({
       action: 'sync.stop',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
     });
 
     assert.equal(stop.status, 'success');
@@ -842,7 +892,6 @@ test('handleRequest sync.start performs initial push and sync.stop stops watcher
     restore();
   }
 });
-
 
 test('handleRequest disconnect removes host channels and blocks implicit reconnect actions', async () => {
   class FakeSSHManager {
@@ -912,33 +961,33 @@ test('handleRequest disconnect removes host channels and blocks implicit reconne
   const { server, restore } = loadServer({ sshManagerExports: FakeSSHManager });
 
   try {
-    await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
     await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'pwd' },
     });
     await new Promise((resolve) => setImmediate(resolve));
 
-    const beforeDisconnect = await server.handleRequest({ action: 'channel.list', host: 'yantw-novpn' });
+    const beforeDisconnect = await server.handleRequest({ action: 'channel.list', host: EXAMPLE_HOST });
     assert.equal(beforeDisconnect.status, 'success');
     assert.equal(beforeDisconnect.data.length, 1);
 
-    const disconnected = await server.handleRequest({ action: 'disconnect', host: 'yantw-novpn' });
+    const disconnected = await server.handleRequest({ action: 'disconnect', host: EXAMPLE_HOST });
     assert.equal(disconnected.status, 'success');
     assert.deepEqual(disconnected.data, {
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       disconnected: true,
       removedChannels: 1,
     });
 
-    const afterDisconnect = await server.handleRequest({ action: 'channel.list', host: 'yantw-novpn' });
+    const afterDisconnect = await server.handleRequest({ action: 'channel.list', host: EXAMPLE_HOST });
     assert.equal(afterDisconnect.status, 'success');
     assert.deepEqual(afterDisconnect.data, []);
 
     const execAfterDisconnect = await server.handleRequest({
       action: 'exec',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { channel: 'test', cmd: 'pwd' },
     });
     assert.equal(execAfterDisconnect.status, 'error');
@@ -946,17 +995,17 @@ test('handleRequest disconnect removes host channels and blocks implicit reconne
 
     const addAfterDisconnect = await server.handleRequest({
       action: 'channel.add',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { name: 'test' },
     });
     assert.equal(addAfterDisconnect.status, 'success');
 
-    const connectAgain = await server.handleRequest({ action: 'connect', host: 'yantw-novpn' });
+    const connectAgain = await server.handleRequest({ action: 'connect', host: EXAMPLE_HOST });
     assert.equal(connectAgain.status, 'success');
 
     const addAfterReconnect = await server.handleRequest({
       action: 'channel.add',
-      host: 'yantw-novpn',
+      host: EXAMPLE_HOST,
       payload: { name: 'test' },
     });
     assert.equal(addAfterReconnect.status, 'success');
@@ -964,4 +1013,3 @@ test('handleRequest disconnect removes host channels and blocks implicit reconne
     restore();
   }
 });
-

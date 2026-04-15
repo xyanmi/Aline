@@ -1,3 +1,4 @@
+const path = require('path');
 const { Command } = require('commander');
 const { sendRequest } = require('./client');
 const { renderResult, isJsonSuccess } = require('../utils/jsonOutput');
@@ -20,8 +21,8 @@ function attachJsonOption(command) {
 
 function attachTransferPathOptions(command, { localDescription = 'Local path', remoteDescription = 'Remote path' } = {}) {
   return command
-    .option('-l, --local <path>', localDescription)
-    .option('-r, --remote <path>', remoteDescription);
+    .requiredOption('-l, --local <path>', localDescription)
+    .requiredOption('-r, --remote <path>', remoteDescription);
 }
 
 function attachTransferModeOption(command) {
@@ -166,10 +167,18 @@ function normalizeRemotePathArg(remotePath, { platform = process.platform, env =
   return remotePath;
 }
 
-function resolveTransferPaths({ localPath, remotePath, options = {} }, normalizeOptions = {}) {
+function resolveLocalTransferPath(localPath) {
+  return path.resolve(localPath);
+}
+
+function resolveTransferPaths({ options = {} }, normalizeOptions = {}) {
+  if (!options.local || !options.remote) {
+    throw new Error('Transfer commands require both --local and --remote.');
+  }
+
   return {
-    localPath: options.local || localPath || '.',
-    remotePath: normalizeRemotePathArg(options.remote || remotePath || '.', normalizeOptions),
+    localPath: resolveLocalTransferPath(options.local),
+    remotePath: normalizeRemotePathArg(options.remote, normalizeOptions),
   };
 }
 
@@ -259,7 +268,8 @@ async function followExecution(host, channel, executionId, options) {
 
     if (execution.status !== 'RUNNING') {
       if (!options.quietExit) {
-        process.stdout.write(`\n[exit ${execution.exitCode ?? 0}]\n`);
+        const needsSeparator = output && !output.endsWith('\n');
+        process.stdout.write(`${needsSeparator ? '\n' : ''}[exit ${execution.exitCode ?? 0}]\n`);
       }
       return result;
     }
@@ -328,32 +338,32 @@ function createProgram() {
     }, options));
 
   const sync = program.command('sync').description('Manage background directory sync');
-  attachJsonOption(attachTransferModeOption(attachTransferPathOptions(sync.command('start <host> [localPath] [remotePath]').description('Start background sync from local to remote'), {
+  attachJsonOption(attachTransferModeOption(attachTransferPathOptions(sync.command('start <host>').description('Start background sync from local to remote'), {
     localDescription: 'Local source path',
     remoteDescription: 'Remote destination path',
   })))
-    .action((host, localPath = '.', remotePath = '.', options) => {
-      const paths = resolveTransferPayload({ localPath, remotePath, options });
+    .action((host, options) => {
+      const paths = resolveTransferPayload({ options });
       return runRequest('sync.start', host, paths, options);
     });
   attachJsonOption(sync.command('stop <host>').description('Stop background sync for a host'))
     .action((host, options) => runRequest('sync.stop', host, {}, options));
 
-  attachJsonOption(attachTransferModeOption(attachTransferPathOptions(program.command('push <host> [localPath] [remotePath]').description('Copy local contents to the remote host once'), {
+  attachJsonOption(attachTransferModeOption(attachTransferPathOptions(program.command('push <host>').description('Copy local contents to the remote host once'), {
     localDescription: 'Local source path',
     remoteDescription: 'Remote destination path',
   })))
-    .action((host, localPath = '.', remotePath = '.', options) => {
-      const paths = resolveTransferPayload({ localPath, remotePath, options });
+    .action((host, options) => {
+      const paths = resolveTransferPayload({ options });
       return runRequest('push', host, paths, options);
     });
 
-  attachJsonOption(attachTransferModeOption(attachTransferPathOptions(program.command('pull <host> [remotePath] [localPath]').description('Copy remote contents to the local machine once'), {
+  attachJsonOption(attachTransferModeOption(attachTransferPathOptions(program.command('pull <host>').description('Copy remote contents to the local machine once'), {
     remoteDescription: 'Remote source path',
     localDescription: 'Local destination path',
   })))
-    .action((host, remotePath = '.', localPath = '.', options) => {
-      const paths = resolveTransferPayload({ localPath, remotePath, options });
+    .action((host, options) => {
+      const paths = resolveTransferPayload({ options });
       return runRequest('pull', host, paths, options);
     });
 
@@ -364,6 +374,7 @@ module.exports = {
   ALINE_LOGO,
   createProgram,
   normalizeRemotePathArg,
+  resolveLocalTransferPath,
   resolveTransferPaths,
   resolveTransferPayload,
   formatError,

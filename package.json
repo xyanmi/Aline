@@ -1,11 +1,27 @@
 {
   "name": "aline",
   "version": "0.1.0",
-  "description": "Cross-platform remote debugging and sync engine",
+  "description": "Agent-oriented remote debugging and sync engine for Unix-like hosts",
+  "license": "MIT",
   "bin": {
     "aline": "bin/aline.js"
   },
   "type": "commonjs",
+  "files": [
+    "bin",
+    "src",
+    "skills/aline",
+    "assets",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xyanmi/Aline.git"
+  },
+  "homepage": "https://github.com/xyanmi/Aline",
+  "bugs": {
+    "url": "https://github.com/xyanmi/Aline/issues"
+  },
   "scripts": {
     "test": "node --test"
   },

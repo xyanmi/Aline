@@ -24,16 +24,16 @@ test.afterEach(() => {
 
 test('buildProxyJumpArgs builds ssh -W command for single jump host', () => {
   const args = buildProxyJumpArgs({
-    hostname: '172.24.170.96',
+    hostname: 'target.internal',
     port: 22,
-    proxyJump: 'proxy@8.152.204.138',
+    proxyJump: 'proxy@example-gateway',
   });
 
   assert.deepEqual(args, [
     '-o', 'BatchMode=yes',
     '-o', 'ConnectTimeout=10',
-    '-W', '[172.24.170.96]:22',
-    'proxy@8.152.204.138',
+    '-W', '[target.internal]:22',
+    'proxy@example-gateway',
   ]);
 });
 
@@ -73,7 +73,7 @@ test('buildAuthenticationOptions includes SSH agent when available', () => {
 test('buildAuthenticationOptions falls back to identity file content', () => {
   delete process.env.SSH_AUTH_SOCK;
   const options = buildAuthenticationOptions({
-    identityFile: 'C:/Users/xyanm/.ssh/id_rsa',
+    identityFile: 'C:/Users/example/.ssh/id_rsa',
   });
 
   assert.equal(typeof options.privateKey, 'string');
@@ -82,29 +82,29 @@ test('buildAuthenticationOptions falls back to identity file content', () => {
 
 test('listConnections returns cached host metadata', () => {
   const manager = new SSHManagerClass(new ChannelManager(), { warn() {}, error() {} });
-  manager.connections.set('yantw-novpn', {
+  manager.connections.set('example-host', {
     ready: true,
     connectedAt: '2026-04-14T00:00:00.000Z',
     hostConfig: {
-      hostname: '8.8.8.8',
+      hostname: 'example-host.internal',
       port: 22,
-      user: 'root',
+      user: 'remote-user',
     },
   });
 
   assert.deepEqual(manager.listConnections(), [{
-    host: 'yantw-novpn',
+    host: 'example-host',
     connected: true,
     connectedAt: '2026-04-14T00:00:00.000Z',
-    hostname: '8.8.8.8',
+    hostname: 'example-host.internal',
     port: 22,
-    user: 'root',
+    user: 'remote-user',
   }]);
 });
 
 test('disconnect closes cached client and resets host channels', () => {
   const channelManager = new ChannelManager();
-  const channel = channelManager.add('yantw-novpn', 'test');
+  const channel = channelManager.add('example-host', 'test');
   let signal = null;
   let closed = false;
   let ended = false;
@@ -119,7 +119,7 @@ test('disconnect closes cached client and resets host channels', () => {
   });
 
   const manager = new SSHManagerClass(channelManager, { warn() {}, error() {} });
-  manager.connections.set('yantw-novpn', {
+  manager.connections.set('example-host', {
     ready: true,
     proxyProcess: null,
     client: {
@@ -129,12 +129,12 @@ test('disconnect closes cached client and resets host channels', () => {
     },
   });
 
-  assert.equal(manager.disconnect('yantw-novpn'), true);
+  assert.equal(manager.disconnect('example-host'), true);
   assert.equal(signal, 'INT');
   assert.equal(closed, true);
   assert.equal(ended, true);
   assert.equal(channel.status, 'IDLE');
-  assert.equal(manager.connections.has('yantw-novpn'), false);
+  assert.equal(manager.connections.has('example-host'), false);
 });
 
 test('ShellSession strips bracketed paste control sequences from output', async () => {
@@ -150,14 +150,38 @@ test('ShellSession strips bracketed paste control sequences from output', async 
   const execution = session.exec('pwd');
   await new Promise((resolve) => setImmediate(resolve));
 
-  stream.emit('data', Buffer.from('\u001b[?2004l\r\r\n/home/wu_2\r\n\u001b[?2004h\r\n'));
+  stream.emit('data', Buffer.from('\u001b[?2004l\r\r\n/home/remote-user\r\n\u001b[?2004h\r\n'));
   stream.emit('data', Buffer.from(`\n${session.activeExecution.token}:0\n`));
 
   const result = await execution.done;
   const rendered = output.join('');
   assert.equal(result.exitCode, 0);
-  assert.ok(rendered.includes('/home/wu_2'));
+  assert.ok(rendered.includes('/home/remote-user'));
   assert.equal(rendered.includes('\u001b[?2004l'), false);
   assert.equal(rendered.includes('\u001b[?2004h'), false);
+  session.close();
+});
+
+test('ShellSession strips shell prompt artifacts from output', async () => {
+  const stream = new PassThrough();
+  stream.write = () => true;
+  stream.stderr = new PassThrough();
+  stream.close = () => stream.emit('close');
+
+  const session = new ShellSession(stream);
+  const output = [];
+  session.onData((chunk) => output.push(chunk.toString('utf8')));
+
+  const execution = session.exec('echo done');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  stream.emit('data', Buffer.from('(tensor) \r\ndone\r\n(tensor) \r\n'));
+  stream.emit('data', Buffer.from(`\n${session.activeExecution.token}:0\n`));
+
+  const result = await execution.done;
+  const rendered = output.join('');
+  assert.equal(result.exitCode, 0);
+  assert.equal(rendered.includes('(tensor)'), false);
+  assert.ok(rendered.includes('done'));
   session.close();
 });

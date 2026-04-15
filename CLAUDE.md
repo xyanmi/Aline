@@ -142,12 +142,12 @@ CLI 与 Daemon 之间传输 JSON 数据。
 
 ### 5.4 资产同步
 
-* `aline sync start <host> [local_path] [remote_path]`
-  * 后台启动 `chokidar` 挂载目录，屏蔽 `node_modules` 和 `.git`，文件变动即刻触发 `rsync`。
+* `aline sync start <host> --local <local_path> --remote <remote_path>`
+  * 后台启动 `chokidar` 挂载显式本地目录，屏蔽 `node_modules` 和 `.git`，文件变动即刻触发同步。
 * `aline sync stop <host>`
   * 停止后台监听器。
-* `aline push <host>` / `aline pull <host>`
-  * 执行单次强制全量/增量双向同步。
+* `aline push <host> --local <local_path> --remote <remote_path>` / `aline pull <host> --remote <remote_path> --local <local_path>`
+  * 执行单次强制全量/增量双向同步。传输命令必须显式提供 `--local` 与 `--remote`，不支持隐藏式位置参数，避免本地/远端路径歧义。
 
 ## 6. 异常处理与边界条件
 

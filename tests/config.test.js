@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolveHostConfig } = require('../src/utils/config');
 
-test('resolveHostConfig resolves yantw-novpn from ssh config or defaults', () => {
-  const result = resolveHostConfig('yantw-novpn');
-  assert.equal(result.host, 'yantw-novpn');
+test('resolveHostConfig resolves generic host alias from ssh config or defaults', () => {
+  const result = resolveHostConfig('example-host');
+  assert.equal(result.host, 'example-host');
   assert.equal(typeof result.hostname, 'string');
   assert.ok(result.hostname.length > 0);
   assert.equal(typeof result.port, 'number');
@@ -12,6 +12,6 @@ test('resolveHostConfig resolves yantw-novpn from ssh config or defaults', () =>
 });
 
 test('resolveHostConfig preserves ProxyJump when defined', () => {
-  const result = resolveHostConfig('yantw-novpn');
+  const result = resolveHostConfig('example-host');
   assert.equal(result.proxyJump === undefined || typeof result.proxyJump === 'string', true);
 });

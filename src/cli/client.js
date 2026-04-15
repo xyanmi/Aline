@@ -1,18 +1,27 @@
 const { ensureDaemon, readMetadata } = require('../daemon/daemonProcess');
 const { connect } = require('../utils/ipc');
 
-async function sendRequest(request) {
-  await ensureDaemon();
+function wrapRequest(request, metadata) {
+  return {
+    token: metadata.token,
+    request,
+  };
+}
 
-  let metadata = readMetadata();
+async function sendRequest(request) {
+  let metadata = await ensureDaemon();
+  if (!metadata) {
+    metadata = readMetadata();
+  }
+
   let attempts = 0;
-  while (!metadata?.endpoint && attempts < 20) {
+  while ((!metadata?.endpoint || !metadata?.token) && attempts < 20) {
     await new Promise((resolve) => setTimeout(resolve, 150));
     metadata = readMetadata();
     attempts += 1;
   }
 
-  if (!metadata?.endpoint) {
+  if (!metadata?.endpoint || !metadata?.token) {
     throw new Error('Daemon failed to start');
   }
 
@@ -35,7 +44,7 @@ async function sendRequest(request) {
           }
         });
         socket.on('connect', () => {
-          socket.write(JSON.stringify(request));
+          socket.write(JSON.stringify(wrapRequest(request, metadata)));
           socket.end();
         });
       });
@@ -45,7 +54,7 @@ async function sendRequest(request) {
       if (error.code !== 'ECONNREFUSED' && error.code !== 'ENOENT') {
         throw error;
       }
-      await ensureDaemon();
+      metadata = await ensureDaemon();
       await new Promise((resolve) => setTimeout(resolve, 150));
       metadata = readMetadata() || metadata;
     }
@@ -55,5 +64,6 @@ async function sendRequest(request) {
 }
 
 module.exports = {
+  wrapRequest,
   sendRequest,
 };

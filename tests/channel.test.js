@@ -70,3 +70,14 @@ test('Channel log snapshot includes command history and current execution', () =
   assert.match(snapshot.logs, /line-2/);
   assert.match(snapshot.logs, /\[running\]/);
 });
+
+test('Channel strips prompt-only lines from execution logs', () => {
+  const channel = new Channel('demo');
+  const execution = channel.startExecution('python script.py');
+
+  channel.appendExecutionLog(execution, '(tensor) \nresult\r\n\r\n');
+  channel.completeExecution(execution, 0);
+
+  assert.equal(channel.getHistory()[0].output, 'result');
+  assert.equal(channel.getLogs(10), '$ python script.py\nresult\n[exit 0]');
+});

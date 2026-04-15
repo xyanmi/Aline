@@ -44,8 +44,12 @@ class Channel {
       return;
     }
 
-    const lines = String(data).split('\n');
+    const text = String(data).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = text.split('\n').filter((line) => !/^\([A-Za-z0-9_.-]+\)\s*$/.test(line));
     execution.lines.push(...lines);
+    while (execution.lines.length > 0 && execution.lines[execution.lines.length - 1] === '') {
+      execution.lines.pop();
+    }
     this.trimExecutions();
     this.lastActiveAt = new Date().toISOString();
   }

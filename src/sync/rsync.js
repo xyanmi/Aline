@@ -25,6 +25,10 @@ function checkTarAvailable() {
   return checkCommandAvailable('tar', ['--version']);
 }
 
+function checkSshAvailable() {
+  return checkCommandAvailable('ssh', ['-V']);
+}
+
 function quoteShellArg(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
@@ -133,9 +137,16 @@ function buildRsyncArgs(source, destination, options = {}) {
 }
 
 async function ensureTarFallbackAvailable() {
-  const tarAvailable = await checkTarAvailable();
-  if (!tarAvailable) {
-    throw new Error('Neither rsync nor tar is available on this machine');
+  const missing = [];
+  if (!await checkTarAvailable()) {
+    missing.push('tar');
+  }
+  if (!await checkSshAvailable()) {
+    missing.push('ssh');
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`rsync is unavailable and tar+ssh fallback is missing local executable(s): ${missing.join(', ')}`);
   }
 }
 
@@ -216,6 +227,7 @@ async function pullPath(host, remotePath, localPath, options = {}) {
 module.exports = {
   checkRsyncAvailable,
   checkTarAvailable,
+  checkSshAvailable,
   runRsync,
   pushPath,
   pullPath,

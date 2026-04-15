@@ -1,12 +1,12 @@
-const fs = require('fs');
 const net = require('net');
 const ChannelManager = require('./channelManager');
 const SSHManager = require('./sshManager');
 const SyncWatcher = require('../sync/watcher');
 const rsync = require('../sync/rsync');
 const { success, failure } = require('../utils/jsonOutput');
-const { getEndpoint, listen, cleanupEndpoint } = require('../utils/ipc');
+const { getCandidateEndpoints, listenOnAvailableEndpoint, cleanupEndpoint } = require('../utils/ipc');
 const { ensureRuntimeDirSync, getMetadataFile } = require('../utils/platform');
+const { writeMetadata, createRequestToken } = require('./daemonProcess');
 const { createLogger } = require('../utils/logger');
 
 const logger = createLogger('daemon');
@@ -246,11 +246,21 @@ async function handleRequest(request) {
   }
 }
 
+function unwrapAuthenticatedRequest(envelope, expectedToken) {
+  if (!expectedToken) {
+    return envelope;
+  }
+
+  if (!envelope || envelope.token !== expectedToken || typeof envelope.request !== 'object') {
+    return null;
+  }
+
+  return envelope.request;
+}
+
 async function startServer() {
   ensureRuntimeDirSync();
-  const endpoint = getEndpoint();
-
-  cleanupEndpoint(endpoint);
+  const token = createRequestToken();
 
   const server = net.createServer({ allowHalfOpen: true }, (socket) => {
     let body = '';
@@ -259,7 +269,12 @@ async function startServer() {
     });
     socket.on('end', async () => {
       try {
-        const request = JSON.parse(body || '{}');
+        const envelope = JSON.parse(body || '{}');
+        const request = unwrapAuthenticatedRequest(envelope, token);
+        if (!request) {
+          socket.end(JSON.stringify(failure('Unauthorized daemon request', 'UNAUTHORIZED')));
+          return;
+        }
         const response = await handleRequest(request);
         socket.end(JSON.stringify(response));
       } catch (error) {
@@ -268,8 +283,8 @@ async function startServer() {
     });
   });
 
-  await listen(server, endpoint);
-  fs.writeFileSync(getMetadataFile(), JSON.stringify({ pid: process.pid, endpoint }, null, 2));
+  const endpoint = await listenOnAvailableEndpoint(server, getCandidateEndpoints(20));
+  writeMetadata({ pid: process.pid, endpoint, token });
   const shutdown = () => cleanupEndpoint(endpoint);
   process.on('exit', shutdown);
   process.on('SIGINT', () => {
@@ -291,6 +306,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  unwrapAuthenticatedRequest,
   startServer,
   handleRequest,
 };

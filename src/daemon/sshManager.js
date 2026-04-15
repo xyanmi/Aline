@@ -22,7 +22,9 @@ function quoteShellLiteral(value) {
 }
 
 function stripShellControlSequences(text) {
-  return String(text).replace(/\u001b\[\?2004[hl]/g, '');
+  return String(text)
+    .replace(/\u001b\[\?2004[hl]/g, '')
+    .replace(/(^|\r?\n)\([A-Za-z0-9_.-]+\)[ \t\r]*(?=\n|$)/g, '$1');
 }
 
 function expandHome(filePath) {
