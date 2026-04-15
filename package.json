@@ -1,0 +1,21 @@
+{
+  "name": "aline",
+  "version": "0.1.0",
+  "description": "Cross-platform remote debugging and sync engine",
+  "bin": {
+    "aline": "bin/aline.js"
+  },
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "commander": "^14.0.1",
+    "ssh-config": "^5.0.3",
+    "ssh2": "^1.17.0"
+  }
+}

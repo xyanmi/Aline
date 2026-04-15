@@ -1,0 +1,34 @@
+# Node.js dependencies
+node_modules/
+
+# Local Claude/Aline tooling state
+.claude/
+.tmp/
+.aline/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build and coverage output
+dist/
+coverage/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local demo scratch workspaces and pulled artifacts
+demo/aline-test/
+demo/pulled-*/
+demo/sync*/
