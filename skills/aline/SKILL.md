@@ -52,7 +52,7 @@ Use it directly for all normal command examples in this skill.
 Ask the user to install it first:
 
 ```bash
-npm install -g aline
+npm install -g @xyanmi/aline
 aline --help
 ```
 

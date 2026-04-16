@@ -79,7 +79,7 @@ It is especially useful when you want agents to:
 After Aline is published, install globally:
 
 ```bash
-npm install -g aline
+npm install -g @xyanmi/aline
 ```
 
 Then verify:
@@ -111,7 +111,7 @@ node ./bin/aline --help
 After publish, users can also run Aline without a global install:
 
 ```bash
-npx aline --help
+npx --package @xyanmi/aline aline --help
 ```
 
 ## Requirements
