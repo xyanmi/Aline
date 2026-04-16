@@ -1,6 +1,6 @@
 ---
 name: aline
-description: Use Aline for real remote command execution, channel-based logs, push/pull transfers, sync workflows, and troubleshooting. Trigger this whenever the user wants to operate a Unix-like remote host through Aline, set up Aline, understand how to use connect/exec/log/push/pull/sync correctly, or debug why an Aline workflow is failing. Make sure to use this skill for agent workflows that should go through Aline instead of ad-hoc raw ssh.
+description: Use Aline for real remote command execution, channel-based logs, push/pull transfers, sync workflows, skill installation, and troubleshooting. Trigger this whenever the user wants to operate a Unix-like remote host through Aline, install the shipped Aline skill for Claude/Codex-style agents, set up Aline, understand how to use connect/exec/log/push/pull/sync correctly, or debug why an Aline workflow is failing. Make sure to use this skill for agent workflows that should go through Aline instead of ad-hoc raw ssh.
 ---
 # Aline
 
@@ -64,6 +64,28 @@ node ./bin/aline --help
 ```
 
 The default assumption for this skill is the installed `aline` command, not `node ./bin/aline`.
+
+## Installing the shipped skill
+
+Aline can also install the shipped skill into an agent-specific local skills directory.
+
+Examples:
+
+```bash
+aline skill claude
+aline skill codex
+```
+
+That installs the shipped `skills/aline` directory to:
+
+- `~/.claude/skills/aline`
+- `~/.codex/skills/aline`
+
+If the destination already exists, use:
+
+```bash
+aline skill claude --force
+```
 
 ## Core usage rules
 
@@ -193,7 +215,7 @@ When you use Aline for the user, report:
 
 ```bash
 aline connect my-host --json
-aline channel add demo --json
+aline channel add my-host demo --json
 aline push my-host --local ./demo/aline-test --remote ~/aline-test --json
 aline exec my-host --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
 aline pull my-host --remote ~/aline-test --local ./demo/aline-test --json

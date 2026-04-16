@@ -43,7 +43,7 @@ aline --help
 
 ```bash
 aline connect <host> --json
-aline channel add demo --json
+aline channel add <host> demo --json
 aline push <host> --local ./demo/aline-test --remote ~/aline-test --json
 aline exec <host> --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
 aline pull <host> --remote ~/aline-test --local ./demo/aline-test --json
@@ -115,6 +115,30 @@ After publish, users can also run Aline without a global install:
 npx --package @xyanmi/aline aline --help
 ```
 
+## Skill installation command
+
+Aline can install the shipped skill into an agent-specific local skills directory for you.
+
+Examples:
+
+```bash
+aline skill claude
+aline skill codex
+```
+
+That installs the shipped `skills/aline` directory to:
+
+- `aline skill claude` -> `~/.claude/skills/aline`
+- `aline skill codex` -> `~/.codex/skills/aline`
+
+If the target directory already exists, rerun with `--force` to replace it:
+
+```bash
+aline skill claude --force
+```
+
+You can also use `--json` for machine-readable output.
+
 ## Requirements
 
 - Node.js 18+
@@ -152,6 +176,23 @@ aline log <host> setup --tail 200
 ## Command overview
 
 All commands support `--json` for machine-readable output.
+
+### Skill installation
+
+```bash
+aline skill <agent-name>
+```
+
+Examples:
+
+```bash
+aline skill claude
+aline skill codex
+```
+
+- Installs the shipped `skills/aline` skill into `~/.<agent-name>/skills/aline`
+- Use `--force` to replace an existing installed copy
+- Use `--json` for structured output
 
 ### Connection management
 
@@ -233,6 +274,7 @@ Semantics:
 
 ```bash
 aline connect my-host
+aline channel add my-host demo --json
 aline push my-host --local ./demo/aline-test --remote ~/aline-test --json
 aline exec my-host --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
 aline pull my-host --remote ~/aline-test --local ./demo/aline-test --json
@@ -248,7 +290,21 @@ Aline is designed for agents, so the repo ships a formal usage skill under `./sk
 
 ### How to install the shipped skill
 
-Copy or symlink the skill directory into your Claude skills directory.
+The recommended path is to use the built-in installer command:
+
+```bash
+aline skill claude
+```
+
+You can also target other agent homes, for example:
+
+```bash
+aline skill codex
+```
+
+This installs the shipped skill into `~/.<agent-name>/skills/aline`.
+
+If you prefer to do it manually, you can still copy or symlink the directory yourself.
 
 Example (copy):
 
@@ -261,8 +317,6 @@ Example (symlink on Unix-like systems):
 ```bash
 ln -s /path/to/Aline/skills/aline ~/.claude/skills/aline
 ```
-
-Once installed, the skill can guide agents through Aline setup, command usage, and troubleshooting.
 
 ## Sync backend behavior
 

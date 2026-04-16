@@ -10,6 +10,10 @@ const {
   formatError,
   ALINE_LOGO,
 } = require('../src/cli/commands');
+const {
+  normalizeAgentName,
+  resolveSkillInstallPaths,
+} = require('../src/cli/skillInstaller');
 
 function captureHelp(command) {
   let output = '';
@@ -32,6 +36,16 @@ test('createProgram exposes channel delete command instead of rm', () => {
 
   assert.equal(subcommands.includes('delete'), true);
   assert.equal(subcommands.includes('rm'), false);
+});
+
+test('createProgram exposes skill install command', () => {
+  const program = createProgram();
+  const skill = program.commands.find((command) => command.name() === 'skill');
+
+  assert.ok(skill);
+  const helpText = captureHelp(skill);
+  assert.match(helpText, /Install the shipped Aline skill for an agent/);
+  assert.match(helpText, /--force/);
 });
 
 test('createProgram includes logo once in root help output', () => {
@@ -69,6 +83,27 @@ test('transfer command help requires explicit local and remote flags', () => {
   assert.match(pushHelp, /-r, --remote <path>/);
   assert.match(pullHelp, /-l, --local <path>/);
   assert.match(syncStartHelp, /-r, --remote <path>/);
+});
+
+test('normalizeAgentName strips a leading dot', () => {
+  assert.equal(normalizeAgentName('.claude'), 'claude');
+});
+
+test('normalizeAgentName rejects invalid path-like values', () => {
+  assert.throws(() => normalizeAgentName('../claude'), /path separators or traversal/);
+  assert.throws(() => normalizeAgentName('co/dex'), /path separators or traversal/);
+  assert.throws(() => normalizeAgentName(''), /required/);
+});
+
+test('resolveSkillInstallPaths targets hidden agent skill directories', () => {
+  const result = resolveSkillInstallPaths('codex', {
+    homeDirectory: 'C:/Users/example-user',
+  });
+
+  assert.equal(result.agent, 'codex');
+  assert.equal(result.skill, 'aline');
+  assert.equal(result.destinationPath, path.join('C:/Users/example-user', '.codex', 'skills', 'aline'));
+  assert.match(result.sourcePath, /skills[\\/]aline$/);
 });
 
 test('normalizeRemotePathArg keeps POSIX home paths outside Git Bash on Windows', () => {

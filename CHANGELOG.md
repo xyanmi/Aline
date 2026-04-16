@@ -2,7 +2,18 @@
 
 All notable changes to Aline will be documented in this file.
 
-## 0.1.0 - Unreleased
+## 0.1.1 - Unreleased
+
+### Added
+
+- `aline skill <agent-name>` to install the shipped `skills/aline` directory into agent-specific home skill folders such as `~/.claude/skills/aline` and `~/.codex/skills/aline`.
+
+### Changed
+
+- README and shipped skill docs now document the built-in skill installer and keep explicit `channel add <host> demo --json` in the recommended workflow examples.
+- Scoped npm package remains `@xyanmi/aline`.
+
+## 0.1.0 - Released
 
 ### Added
 

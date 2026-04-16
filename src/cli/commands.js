@@ -1,7 +1,9 @@
 const path = require('path');
 const { Command } = require('commander');
 const { sendRequest } = require('./client');
-const { renderResult, isJsonSuccess } = require('../utils/jsonOutput');
+const { installSkill } = require('./skillInstaller');
+const { renderResult, isJsonSuccess, success, failure } = require('../utils/jsonOutput');
+
 
 const ALINE_LOGO = `
                 ___    ___           
@@ -295,6 +297,28 @@ async function runExec(host, command, options) {
   return followExecution(host, options.channel, result.data.executionId, options);
 }
 
+async function runSkillInstall(agentName, options) {
+  try {
+    const result = installSkill(agentName, { force: options.force });
+    const response = success(result);
+    const output = options.json
+      ? renderResult(response, true)
+      : `Installed Aline skill for ${result.agent} at ${result.destinationPath}`;
+    if (output) {
+      console.log(output);
+    }
+    return response;
+  } catch (error) {
+    const response = failure(error.message, 'SKILL_INSTALL_FAILED');
+    const output = options.json ? renderResult(response, true) : error.message;
+    if (output) {
+      console.error(output);
+    }
+    process.exitCode = 1;
+    return response;
+  }
+}
+
 function createProgram() {
   const program = attachHelpBranding(new Command());
   program
@@ -313,6 +337,10 @@ function createProgram() {
 
   attachJsonOption(program.command('status <host>').description('Collect a quick remote host status snapshot'))
     .action((host, options) => runRequest('status', host, {}, options));
+
+  attachJsonOption(program.command('skill <agent-name>').description('Install the shipped Aline skill for an agent'))
+    .option('--force', 'Replace an existing installed skill directory')
+    .action((agentName, options) => runSkillInstall(agentName, options));
 
   const channel = program.command('channel').description('Manage named execution channels');
   attachJsonOption(channel.command('add <host> <name>').description('Create a named channel for a host'))
@@ -380,5 +408,6 @@ module.exports = {
   formatError,
   runRequest,
   followExecution,
+  runSkillInstall,
 };
 
