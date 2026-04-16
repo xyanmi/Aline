@@ -1,5 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { PassThrough } = require('stream');
 const SSHManager = require('../src/daemon/sshManager');
 const ChannelManager = require('../src/daemon/channelManager');
@@ -72,8 +75,12 @@ test('buildAuthenticationOptions includes SSH agent when available', () => {
 
 test('buildAuthenticationOptions falls back to identity file content', () => {
   delete process.env.SSH_AUTH_SOCK;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aline-key-test-'));
+  const keyPath = path.join(tempDir, 'id_rsa');
+  fs.writeFileSync(keyPath, '-----BEGIN OPENSSH PRIVATE KEY-----\nexample\n-----END OPENSSH PRIVATE KEY-----\n');
+
   const options = buildAuthenticationOptions({
-    identityFile: 'C:/Users/example/.ssh/id_rsa',
+    identityFile: keyPath,
   });
 
   assert.equal(typeof options.privateKey, 'string');
