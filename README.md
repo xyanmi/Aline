@@ -43,6 +43,7 @@ aline --help
 
 ```bash
 aline connect <host> --json
+aline channel add demo --json
 aline push <host> --local ./demo/aline-test --remote ~/aline-test --json
 aline exec <host> --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
 aline pull <host> --remote ~/aline-test --local ./demo/aline-test --json

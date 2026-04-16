@@ -2,7 +2,6 @@
 name: aline
 description: Use Aline for real remote command execution, channel-based logs, push/pull transfers, sync workflows, and troubleshooting. Trigger this whenever the user wants to operate a Unix-like remote host through Aline, set up Aline, understand how to use connect/exec/log/push/pull/sync correctly, or debug why an Aline workflow is failing. Make sure to use this skill for agent workflows that should go through Aline instead of ad-hoc raw ssh.
 ---
-
 # Aline
 
 Use this skill when the user wants to operate a remote Unix-like machine **through Aline** rather than improvising raw `ssh`, `scp`, or custom shell glue.
@@ -46,9 +45,11 @@ command -v aline
 ```
 
 ### If `aline` exists
+
 Use it directly for all normal command examples in this skill.
 
 ### If `aline` does not exist
+
 Ask the user to install it first:
 
 ```bash
@@ -111,6 +112,7 @@ aline sync stop <host> --json
 ## What to do when a workflow fails
 
 ### If Aline says the host is not connected
+
 Reconnect first:
 
 ```bash
@@ -118,6 +120,7 @@ aline connect <host> --json
 ```
 
 ### If a transfer fails
+
 Check:
 
 - whether `--local` and `--remote` were both provided
@@ -126,6 +129,7 @@ Check:
 - whether the transfer backend reported `rsync` or `tar+ssh`
 
 ### If a long-running command looks stuck
+
 Use channel logs:
 
 ```bash
@@ -139,12 +143,14 @@ Look for:
 - connection loss messages
 
 ### If the user mentions prompt noise or rough streaming output
+
 Explain that Aline already strips common shell prompt artifacts, but streamed output should still be verified through both:
 
 - `exec --follow`
 - `log --tail`
 
 ### If Aline itself might be broken
+
 Use a minimal raw diagnostic only to isolate whether the issue is transport-level:
 
 ```bash
@@ -187,6 +193,7 @@ When you use Aline for the user, report:
 
 ```bash
 aline connect my-host --json
+aline channel add demo --json
 aline push my-host --local ./demo/aline-test --remote ~/aline-test --json
 aline exec my-host --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
 aline pull my-host --remote ~/aline-test --local ./demo/aline-test --json
