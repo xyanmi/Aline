@@ -33,8 +33,21 @@ function quoteShellArg(value) {
   return `'${String(value).replace(/'/g, `'"'"'`)}'`;
 }
 
+function validateRemotePathForUnix(remotePath) {
+  const value = String(remotePath || '');
+  if (!value) {
+    throw new Error('Remote path is required.');
+  }
+
+  if (/^[A-Za-z]:(?:[\\/]|$)/.test(value) || value.includes('\\')) {
+    throw new Error(`Remote path must use Unix-like syntax, not a Windows path: ${value}`);
+  }
+
+  return value;
+}
+
 function quoteRemotePathExpression(remotePath) {
-  const value = String(remotePath);
+  const value = validateRemotePathForUnix(remotePath);
   if (value === '~') {
     return '$HOME';
   }
@@ -150,11 +163,14 @@ async function ensureTarFallbackAvailable() {
   }
 }
 
+function buildTarCreateArgs(localPath) {
+  return ['-cf', '-', '-C', normalizeTarPathForSpawn(normalizeLocalPath(localPath)), '.'];
+}
+
 async function pushWithTar(host, localPath, remotePath, options = {}) {
   await ensureTarFallbackAvailable();
 
-  const sourcePath = normalizeLocalPath(localPath);
-  const tarChild = spawnHidden('tar', ['-cf', '-', '-C', sourcePath, '.'], {
+  const tarChild = spawnHidden('tar', buildTarCreateArgs(localPath), {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const sshChild = spawnHidden('ssh', [host, buildRemoteExtractCommand(remotePath, options)], {
@@ -207,8 +223,10 @@ async function pullWithTar(host, remotePath, localPath, options = {}) {
 }
 
 async function pushPath(host, localPath, remotePath, options = {}) {
+  validateRemotePathForUnix(remotePath);
   if (await checkRsyncAvailable()) {
-    const result = await runRsync(buildRsyncArgs(`${localPath}/`, `${host}:${remotePath}`, options));
+    const sourcePath = normalizeTarPathForSpawn(normalizeLocalPath(localPath));
+    const result = await runRsync(buildRsyncArgs(`${sourcePath}/`, `${host}:${remotePath}`, options));
     return { method: 'rsync', ...result };
   }
 
@@ -216,8 +234,10 @@ async function pushPath(host, localPath, remotePath, options = {}) {
 }
 
 async function pullPath(host, remotePath, localPath, options = {}) {
+  validateRemotePathForUnix(remotePath);
   if (await checkRsyncAvailable()) {
-    const result = await runRsync(buildRsyncArgs(`${host}:${remotePath}/`, localPath, options));
+    const destinationPath = normalizeTarPathForSpawn(normalizeLocalPath(localPath));
+    const result = await runRsync(buildRsyncArgs(`${host}:${remotePath}/`, destinationPath, options));
     return { method: 'rsync', ...result };
   }
 
@@ -233,6 +253,7 @@ module.exports = {
   pullPath,
   pushWithTar,
   pullWithTar,
+  validateRemotePathForUnix,
   quoteShellArg,
   quoteRemotePathExpression,
   getTransferMode,
@@ -241,6 +262,6 @@ module.exports = {
   buildRemoteArchiveCommand,
   buildRsyncArgs,
   normalizeTarPathForSpawn,
+  buildTarCreateArgs,
   clearLocalDirectory,
 };
-

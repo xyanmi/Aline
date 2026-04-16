@@ -270,12 +270,12 @@ test('resolveTransferPayload defaults to mirror mode', () => {
   });
 });
 
-test('resolveTransferPayload uses merge mode when requested under Git Bash', () => {
+test('resolveTransferPayload uses safe mode when requested under Git Bash', () => {
   const result = resolveTransferPayload({
     options: {
       local: './demo/out',
       remote: 'C:/Users/example-user/aline-test',
-      merge: true,
+      safe: true,
     },
   }, {
     platform: 'win32',

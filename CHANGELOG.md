@@ -10,7 +10,8 @@ All notable changes to Aline will be documented in this file.
 
 ### Changed
 
-- README and shipped skill docs now document the built-in skill installer and keep explicit `channel add <host> demo --json` in the recommended workflow examples.
+- README and shipped skill docs now document the built-in skill installer, explain transfer safety more clearly, and keep explicit `channel add <host> demo --json` in the recommended workflow examples.
+- The user-facing transfer safety flag is now `--safe`, which preserves destination-only files instead of destructive mirroring.
 - Scoped npm package remains `@xyanmi/aline`.
 
 ## 0.1.0 - Released

@@ -2,13 +2,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   quoteRemotePathExpression,
+  validateRemotePathForUnix,
   buildRemoteClearCommand,
   buildRemoteExtractCommand,
   buildRemoteArchiveCommand,
   buildRsyncArgs,
   normalizeTarPathForSpawn,
+  buildTarCreateArgs,
   checkSshAvailable,
 } = require('../src/sync/rsync');
+
+test('validateRemotePathForUnix accepts unix-like paths', () => {
+  assert.equal(validateRemotePathForUnix('~/demo-dir'), '~/demo-dir');
+  assert.equal(validateRemotePathForUnix('/tmp/demo-dir'), '/tmp/demo-dir');
+});
+
+test('validateRemotePathForUnix rejects windows-style remote paths', () => {
+  assert.throws(() => validateRemotePathForUnix('C:/Users/example/demo'), /Unix-like syntax/);
+  assert.throws(() => validateRemotePathForUnix('C:\\Users\\example\\demo'), /Unix-like syntax/);
+});
 
 test('quoteRemotePathExpression leaves remote home expansion active', () => {
   assert.equal(quoteRemotePathExpression('~'), '$HOME');
@@ -72,6 +84,19 @@ test('normalizeTarPathForSpawn uses POSIX separators on Windows tar paths', () =
     assert.equal(
       normalizeTarPathForSpawn('C:\\Users\\example\\Desktop\\Dev\\Aline\\demo\\a'),
       'C:/Users/example/Desktop/Dev/Aline/demo/a',
+    );
+  } finally {
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
+});
+
+test('buildTarCreateArgs uses POSIX separators on Windows source paths', () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32' });
+  try {
+    assert.deepEqual(
+      buildTarCreateArgs('C:\\Users\\example\\Desktop\\Dev\\Aline\\demo\\a'),
+      ['-cf', '-', '-C', 'C:/Users/example/Desktop/Dev/Aline/demo/a', '.'],
     );
   } finally {
     Object.defineProperty(process, 'platform', originalPlatform);

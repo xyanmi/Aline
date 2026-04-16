@@ -28,7 +28,7 @@ function attachTransferPathOptions(command, { localDescription = 'Local path', r
 }
 
 function attachTransferModeOption(command) {
-  return command.option('--merge', 'Merge contents instead of mirroring exactly');
+  return command.option('--safe', 'Keep destination-only files instead of mirroring exactly');
 }
 
 function normalizePathForComparison(value) {
@@ -187,7 +187,7 @@ function resolveTransferPaths({ options = {} }, normalizeOptions = {}) {
 function resolveTransferPayload(args, normalizeOptions = {}) {
   return {
     ...resolveTransferPaths(args, normalizeOptions),
-    mode: args.options?.merge ? 'merge' : 'mirror',
+    mode: args.options?.safe ? 'merge' : 'mirror',
   };
 }
 
