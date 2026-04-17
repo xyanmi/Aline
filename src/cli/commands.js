@@ -3,14 +3,14 @@ const { Command } = require('commander');
 const { sendRequest } = require('./client');
 const { installSkill } = require('./skillInstaller');
 const { renderResult, isJsonSuccess, success, failure } = require('../utils/jsonOutput');
-
+const packageInfo = require('../../package.json');
 
 const ALINE_LOGO = `
-                ___    ___           
-  ╭━━━━━╮      /   |  / (_)___  ___  
-  ┃● - ●┃     / /| | / / / __ \\/ _ \\ 
-  ╰━┳━┳━╯    / ___ |/ / / / / /  __/ 
-   ▀▀ ▀▀    /_/  |_/_/_/_/ /_/\\___/  
+                ___    ___
+  ╭━━━━━╮      /   |  / (_)___  ___
+  ┃● - ●┃     / /| | / / / __ \/ _ \\
+  ╰━┳━┳━╯    / ___ |/ / / / / /  __/
+   ▀▀ ▀▀    /_/  |_/_/_/_/ /_/\\___/
 `;
 
 function attachHelpBranding(command) {
@@ -323,7 +323,8 @@ function createProgram() {
   const program = attachHelpBranding(new Command());
   program
     .name('aline')
-    .description('Cross-platform remote debugging and sync engine');
+    .description('Cross-platform remote debugging and sync engine')
+    .version(packageInfo.version);
 
   attachJsonOption(program.command('connect <host>').description('Establish an SSH connection to a host'))
     .action((host, options) => runRequest('connect', host, {}, options));
@@ -410,4 +411,3 @@ module.exports = {
   followExecution,
   runSkillInstall,
 };
-

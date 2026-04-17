@@ -23,9 +23,27 @@ function normalizeValue(value) {
   return value;
 }
 
+function readComputedValue(computed, key) {
+  if (!computed || typeof computed !== 'object') {
+    return undefined;
+  }
+
+  if (key in computed) {
+    return computed[key];
+  }
+
+  const lowercaseKey = key.toLowerCase();
+  const matchingKey = Object.keys(computed).find((candidate) => candidate.toLowerCase() === lowercaseKey);
+  if (!matchingKey) {
+    return undefined;
+  }
+
+  return computed[matchingKey];
+}
+
 function resolveHostConfig(hostAlias) {
   const config = readSshConfig();
-  const computed = config.compute(hostAlias);
+  const computed = config.compute(hostAlias, { ignoreCase: true });
 
   if (!computed || Object.keys(computed).length === 0) {
     return {
@@ -41,12 +59,12 @@ function resolveHostConfig(hostAlias) {
 
   return {
     host: hostAlias,
-    hostname: normalizeValue(computed.HostName) || hostAlias,
-    port: Number(normalizeValue(computed.Port) || 22),
-    user: normalizeValue(computed.User),
-    identityFile: normalizeValue(computed.IdentityFile),
-    proxyCommand: normalizeValue(computed.ProxyCommand),
-    proxyJump: normalizeValue(computed.ProxyJump),
+    hostname: normalizeValue(readComputedValue(computed, 'hostname')) || hostAlias,
+    port: Number(normalizeValue(readComputedValue(computed, 'port')) || 22),
+    user: normalizeValue(readComputedValue(computed, 'user')),
+    identityFile: normalizeValue(readComputedValue(computed, 'identityfile')),
+    proxyCommand: normalizeValue(readComputedValue(computed, 'proxycommand')),
+    proxyJump: normalizeValue(readComputedValue(computed, 'proxyjump')),
   };
 }
 
@@ -54,4 +72,5 @@ module.exports = {
   getSshConfigPath,
   readSshConfig,
   resolveHostConfig,
+  readComputedValue,
 };

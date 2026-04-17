@@ -4,6 +4,21 @@
   <img src="assets/logo.png" alt="Aline logo" width="360" />
 </p>
 
+## Table of contents
+
+- [中文概述](#中文概述)
+- [Support boundary](#support-boundary)
+- [Why Aline exists](#why-aline-exists)
+- [Install Aline](#install-aline)
+- [Skill installation command](#skill-installation-command)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Command overview](#command-overview)
+- [Skills shipped with the project](#skills-shipped-with-the-project)
+- [Sync backend behavior](#sync-backend-behavior)
+- [Current caveats and notes](#current-caveats-and-notes)
+- [Development and safety notes](#development-and-safety-notes)
+
 Aline is a CLI + local daemon built for agents that need a reliable way to connect to remote machines, run commands in reusable channels, inspect logs, push and pull files, and keep a local directory synced to a remote Unix-like workspace.
 
 Instead of rebuilding remote SSH workflows ad hoc for every task, Aline provides a consistent interface for:
@@ -15,31 +30,30 @@ Instead of rebuilding remote SSH workflows ad hoc for every task, Aline provides
 - explicit push / pull transfers
 - background sync for local-to-remote workflows
 
-## Chinese summary
+## 中文概述
 
-Aline is an agent-oriented remote execution and sync tool. It starts a local daemon, connects to a remote Unix-like host over SSH, and gives the agent a stable, scriptable workflow for remote development.
+Aline 是一个面向agent的远程执行与同步工具。它会启动一个本地守护进程，通过 SSH 连接到远程类 Unix 主机，并为agent提供一个稳定且可脚本化的远程开发工作流。
 
-It is designed to reduce the common problems in ad-hoc SSH workflows:
+它的设计旨在减少临时 SSH 工作流中常见的问题：
 
-- agents do not need to rebuild `ssh`, `scp`, or `rsync` command lines every time
-- remote commands can run in named channels and keep their logs
-- short tasks can use `exec --follow` for immediate output
-- long tasks can be inspected with `log --tail`
-- file transfer uses explicit `--local` and `--remote` flags so local and remote paths are not confused
-- when local `rsync` is unavailable, `push`, `pull`, and `sync` fall back to `tar+ssh`
+* agent无需每次都重新构建 `ssh`、`scp` 或 `rsync` 命令行，并且保存命令行状态（如目录，环境）
+* 远程命令可以在命名的通道（channels）中运行并保留其运行日志和输出
+* 短期任务可以使用 `exec --follow` 即时获取输出
+* 长期任务可以使用 `log --tail` 进行检查
+* 可以进行文件传输，使用明确的 `--local` 和 `--remote` 标志，从而避免混淆本地和远程路径，通过文件传输可以实现本地编辑，推送到远程运行。
 
-Current support boundary:
+当前支持边界：
 
-- local: Windows, Linux, macOS
-- remote: Unix-like systems only for now
+* 本地环境：Windows、Linux、macOS
+* 远程环境：目前仅支持类 Unix 系统
 
-After installation you can run:
+安装后你可以运行：
 
 ```bash
 aline --help
 ```
 
-Typical workflow:
+典型工作流：
 
 ```bash
 aline connect <host> --json
@@ -49,7 +63,7 @@ aline exec <host> --channel demo --follow "bash -lc 'cd ~/aline-test && python f
 aline pull <host> --remote ~/aline-test --local ./demo/aline-test --json
 ```
 
-If you want Claude or another agent to use Aline more consistently, install the shipped `skills/aline/` skill.
+如果你想让 Claude 或其他智能体更稳定地使用 Aline，请安装随附的 `skills/aline/` 技能（skill）。
 
 ## Support boundary
 
@@ -155,7 +169,7 @@ Aline assumes the remote host is reachable through a standard SSH alias in `~/.s
 
 ### 2. Connect first
 
-Host-bound actions require an explicit connection first:
+Host-bound actions require an explicit prior `connect`:
 
 ```bash
 aline connect <host>
@@ -272,28 +286,8 @@ Semantics:
 - `pull`: remote source -> local destination
 - `sync start`: watches local source and pushes to remote destination
 - default mode is **mirror**
-- `--safe` keeps destination-only files instead of making the destination match the source exactly
+- `--safe` keeps destination-only files instead of mirroring exactly
 - local paths are resolved by the CLI before daemon handoff, so relative local paths are interpreted relative to the shell where you ran `aline`
-- remote paths must use Unix-like syntax such as `~/workspace` or `/tmp/workspace`; do not use Windows-style paths like `C:/...` for remote targets
-
-### Transfer safety guidance
-
-Be careful with `push`, `pull`, and `sync start`.
-
-The default mirror behavior is intentionally powerful: it can remove destination-only files so the destination matches the source. If you point the command at the wrong directory or misunderstand the direction, you can overwrite or delete important files.
-
-Before running a transfer, double-check:
-
-- which side is the source
-- which side is the destination
-- whether the destination contains important files that should not be removed
-- whether `--safe` is more appropriate than the default mirror mode
-
-Practical guidance:
-
-- if the local directory is the source of truth and you want to protect remote-only files, use `--safe` for `push`
-- if the remote directory is the source of truth and you want to protect local-only files, use `--safe` for `pull`
-- if you want an exact mirror, do **not** use `--safe`, but verify the direction carefully first
 
 ## A short end-to-end example
 
