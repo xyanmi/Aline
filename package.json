@@ -1,6 +1,6 @@
 {
   "name": "@xyanmi/aline",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Agent-oriented remote debugging and sync engine for Unix-like hosts",
   "license": "MIT",
   "bin": {
