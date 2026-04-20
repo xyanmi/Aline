@@ -100,7 +100,12 @@ async function runRsync(args) {
 }
 
 function normalizeLocalPath(localPath) {
-  return path.resolve(localPath || '.');
+  const value = localPath || '.';
+  if (process.platform === 'win32' && path.win32.isAbsolute(value)) {
+    return path.win32.normalize(value);
+  }
+
+  return path.resolve(value);
 }
 
 function ensureLocalDirectory(localPath) {

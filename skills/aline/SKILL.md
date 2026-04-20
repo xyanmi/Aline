@@ -1,24 +1,29 @@
 ---
 name: aline
-description: Use Aline for real remote command execution, running code on Unix-like hosts, channel-based logs, push/pull transfers, sync workflows, skill installation, and troubleshooting. Trigger this whenever the user wants to operate a Unix-like remote host, install the shipped Aline skill for Claude- or Codex-style agents, set up Aline, understand connect/exec/log/push/pull/sync behavior, or debug a failing Aline workflow. Use this skill whenever the main workflow should go through Aline rather than ad-hoc raw SSH.
+description: Use Aline as the default path for remote development and remote execution on Unix-like hosts: connect once, bootstrap a named channel once, reuse that channel's working directory, conda environment, and exported variables across later commands, and use push/pull for local-first file workflows. Trigger this whenever the task involves working on a remote Unix-like host, repeatable channel-based workflows, push/pull/sync, skill installation, or troubleshooting an Aline workflow. Prefer Aline over raw SSH or SCP by default, and do not switch to raw SSH or SCP on your own unless the user explicitly requests it or Aline itself must be diagnosed with a minimal transport check. Do not use for local-only tasks or remote Windows.
 ---
 # Aline
 
-Use this skill when the user wants to operate a remote Unix-like machine **through Aline** rather than improvising raw SSH, SCP, or custom shell glue.
+Use this skill whenever the task involves operating a remote Unix-like machine. Default to Aline rather than improvising raw SSH, SCP, or custom shell glue.
 
-## What Aline is for
+## Core idea
 
-Aline is a local daemon + CLI wrapper that gives agents a stable remote workflow surface:
+Aline is not just a nicer SSH command wrapper. Treat it as a stateful remote channel shell:
 
-- explicit host connections
-- reusable named channels
-- immediate streamed output with `--follow`
-- buffered inspection with `log --tail`
-- explicit push / pull file transfer
-- background local-to-remote sync
-- persistent channel state, so the agent does not need to repeatedly `cd`, reactivate environments, or re-export environment variables
+- a named channel keeps its current working directory
+- a named channel keeps activated environments such as conda
+- a named channel keeps exported environment variables
+- later commands in the same channel should reuse that state instead of rebuilding it
+- `push` and `pull` are the default file workflow for local-first development: edit locally, sync to remote, run remotely, and pull results back when needed
 
-It is especially useful when the user wants repeatable agent behavior instead of re-deriving SSH command sequences each time.
+This is the main reason to use Aline. If you keep repeating `cd`, `source`, `conda activate`, or `export` in every command, you are using Aline like a stateless remote exec tool and missing its core value.
+
+The other core idea is local-first remote development:
+
+- do file edits on the local machine
+- use `aline push` to send local changes to the remote workspace
+- if the latest copy is only on the remote side, use `aline pull`, edit locally, then push back
+- use remote channels mainly to run commands, inspect logs, and keep runtime state
 
 ## Support boundary
 
@@ -27,46 +32,50 @@ Treat the current support boundary as:
 - **Local machine:** Windows, Linux, macOS
 - **Remote machine:** Unix-like only for now
 
-Do **not** claim remote Windows support.
+Do not claim remote Windows support.
+
+## When not to use Aline
+
+Do not use Aline when:
+
+- the task is local-only
+- the remote target is Windows
+- the user explicitly wants raw SSH or SCP
+
+You may still use a minimal raw SSH diagnostic such as `ssh <host> pwd` if Aline itself appears broken and you need to isolate whether transport is the problem.
+
+Do not switch yourself from Aline to raw SSH just because SSH feels shorter. For normal remote development and execution, stay on Aline.
 
 ## First check: is the `aline` command installed?
 
-Before starting a workflow, quietly check whether the `aline` command exists. In normal use, do not announce this check to the user unless it fails.
+Before starting a workflow, quietly check whether the `aline` command exists. In normal use, do not announce this check unless it fails.
 
-Examples:
+Preferred checks:
 
 ```bash
 aline --help
 ```
 
-or, if you just need a quick existence check:
-
-```bash
-command -v aline
-```
-
-### If `aline` exists
-
-Use it directly for all normal command examples in this skill.
-
-### If `aline` does not exist
-
-Ask the user to install it first:
+If `aline` is missing,  suggest:
 
 ```bash
 npm install -g @xyanmi/aline
 aline --help
 ```
 
-## Installing the shipped skill
-
-If the user wants the packaged Aline skill installed locally, Aline can install it into an agent-specific skills directory.
-
-Examples:
+You can also use:
 
 ```bash
-aline skill claude  # installs the skill in ~/.claude/skills/aline
-aline skill codex   # installs the skill in ~/.codex/skills/aline
+npx --package @xyanmi/aline aline --help
+```
+
+## Installing the shipped skill
+
+If the user wants the packaged Aline skill installed locally, use:
+
+```bash
+aline skill claude
+aline skill codex
 ```
 
 If the destination already exists, use:
@@ -75,250 +84,198 @@ If the destination already exists, use:
 aline skill claude --force
 ```
 
-## Core usage rules
+## Default workflow: bootstrap once, reuse many
 
-1. Always connect first before host-bound actions like `exec`, `status`, `push`, `pull`, and `sync start`.
-2. Always use explicit `--local` and `--remote` flags for transfer commands.
-3. Prefer `--json` whenever the task is being automated or inspected by another agent.
-4. Use `log --tail` for long-running channels instead of re-running commands blindly.
-5. Prefer Aline over raw SSH for the main workflow. Only use raw SSH for narrow diagnostics if Aline itself appears broken.
-6. When a task is finished and the channel environment is no longer needed, run `aline channel delete <host> <name>` to release resources.
-7. Be careful with `push` and `pull`: verify which side is the source of truth before running them. If you need to preserve destination-only files, use `--safe` to avoid destructive mirroring.
+Use this as the baseline unless the user explicitly needs a different flow:
 
-## Canonical command patterns
+1. Connect to the host.
+2. Create a named channel.
+3. Bootstrap the channel once.
+4. Run business commands in that same channel without repeating the bootstrap prefix.
+5. Use the `--follow` form for short-running commands when you want to wait for completion and see the output immediately.
+6. Use the non-`--follow` form for long-running work that should keep running in the background, then inspect progress with `log --tail`.
+7. Delete the channel when the workflow is finished.
 
-### Connect first
+Canonical shape:
 
 ```bash
 aline connect <host> --json
+aline channel add <host> <channel> --json
+aline exec <host> --channel <channel> --follow "cd <remote-workdir>"
+aline exec <host> --channel <channel> --follow "conda activate <env>"
+aline exec <host> --channel <channel> --follow "export <NAME>=<value>"
+aline exec <host> --channel <channel> --follow "<short business command>"
+aline exec <host> --channel <channel> "<long-running command>"
+aline log <host> <channel> --tail 200 --json
+aline channel delete <host> <channel> --json
 ```
 
-### Inspect status and current state
+Conda strategy:
+
+- first try `conda` directly in the channel
+- if `conda` already works, do not add extra init steps
+- only if `conda` is missing or `conda activate` fails should you start thinking about sourcing `conda.sh`
+
+Important rule:
+
+- bootstrap once
+- reuse many times
+- only re-bootstrap after state is lost
+
+Do not prepend the same `cd`, `source`, `conda activate`, or `export` sequence to every later command in the same healthy channel.
+Prefer a few short bootstrap commands in one channel over one giant opaque shell chain when that makes the workflow easier to inspect and recover.
+
+For code and file changes, keep a separate rule:
+
+- edit files locally
+- push local changes to the remote workspace
+- or pull the remote files locally, edit them locally, then push them back
+- do not edit project files directly on the remote host during normal Aline workflows
+
+## Channel model and guardrails
+
+Treat channel selection as part of the plan:
+
+- One channel should represent one continuous workflow or one stable remote environment.
+- Reuse the same channel when the next command depends on the same working directory, activated environment, or exported variables.
+- Default to a new channel when you need parallel work, a different project directory, a different conda environment, a different set of exported variables, or a different risk boundary.
+- Do not cram unrelated tasks into one channel just because it is available.
+- Create the channel explicitly with `aline channel add`; do not rely on implicit creation during `exec`.
+
+If you are choosing between "reuse this channel" and "open a new one" across one of those boundaries, prefer a new channel.
+
+After a channel has been bootstrapped, default to running only the business command. Do not keep adding initialization prefixes unless there is a concrete reason.
+
+If the setup has multiple moving parts such as `cd`, conda initialization, environment activation, and exported variables, it is often better to issue them as separate `aline exec` calls in the same channel. That keeps the workflow readable and uses Aline's persistent shell state the way it was designed to be used.
+
+If you are unsure whether state is still present, do a lightweight check first:
 
 ```bash
+aline exec <host> --channel <channel> --follow "pwd"
+aline exec <host> --channel <channel> --follow "echo \$CONDA_DEFAULT_ENV"
+aline exec <host> --channel <channel> --follow "echo \$APP_ENV"
+```
+
+Prefer that over rerunning a full setup sequence.
+
+If conda behavior looks wrong, check in this order:
+
+```bash
+aline exec <host> --channel <channel> --follow "command -v conda"
+aline exec <host> --channel <channel> --follow "echo \$CONDA_DEFAULT_ENV"
+aline exec <host> --channel <channel> --follow "conda activate <env>"
+```
+
+Only if those checks fail should you consider sourcing the host's conda init script.
+
+For scenario-specific bootstrap and reuse examples, read [channel patterns](references/channel-patterns.md).
+
+## Essential command rules
+
+1. Always connect first before `exec`, `status`, `push`, `pull`, and `sync start`.
+2. Prefer `exec --follow` for short tasks where you want the remote output directly.
+3. `exec --follow` is blocking: it waits while the remote command runs and streams output until the command exits or waiting stops.
+4. Use `--timeout <ms>` with `--follow` when you want Aline to stop waiting after some amount of time instead of blocking indefinitely.
+5. Plain `exec` without `--follow` is non-blocking: it starts the remote command and returns immediately, so later inspection should happen through `log --tail`.
+6. Prefer `--json` when the result is being inspected by automation, but remember that `--json` describes what happened to the local Aline command, not the remote business result. `--json --follow` produces JSON metadata plus plain text output.
+7. Always use explicit `--local` and `--remote` flags for transfer commands.
+8. Prefer Aline over raw SSH for the main workflow. Use raw SSH only for narrow transport diagnostics.
+9. Do not edit project files directly on the remote host. Edit locally, then `push`, or `pull` locally first and push the edited result back.
+10. When a task is finished and the channel environment is no longer needed, delete the channel to release resources.
+
+Important output note:
+
+- `--json` is Aline-side metadata, not the remote business result
+- `--json --follow` is mixed output, not pure JSON
+
+Important log note:
+
+- channel logs are buffered, not permanent archival storage
+- if a task will produce a lot of output or artifacts, write results to files on the remote side and pull them back
+
+## State loss: when you must re-bootstrap
+
+Do not assume channel state lasts forever. Re-bootstrap when state has likely been lost, including:
+
+- after `aline disconnect <host>` because that host's channels are cleared
+- after `aline channel delete <host> <channel>`
+- after switching to a different local `cwd` that points to a different Aline daemon scope
+- after a shell session or SSH connection closes unexpectedly
+
+If any of those happened, reconnect if needed, recreate the channel if needed, and run the bootstrap sequence again.
+
+## Transfer and sync safety
+
+Treat `push`, `pull`, and `sync start` as safety-sensitive.
+
+Rules:
+
+- default mode is mirror
+- mirror mode can delete destination-only files
+- this risk exists for both `rsync` and the `tar+ssh` fallback
+- `sync start` immediately performs an initial push; it is not only a passive watcher
+- only one sync watcher can be active per host at a time, so stop the old sync before changing path or mode
+- always write remote paths in Unix style such as `~/workspace` or `/tmp/workspace`
+- use transfer commands to support local-first editing rather than editing files in place on the remote host
+
+`--safe` means:
+
+- keep destination-only files instead of deleting them
+- still update overlapping files from the source side
+- treat the result more like a merge than an exact replacement
+
+Without `--safe`, mirror mode tries to replace the destination so it matches the source exactly.
+
+If you need to preserve destination-only files, use `--safe`.
+
+If you are changing sync configuration for a host, do this explicitly:
+
+```bash
+aline sync stop <host> --json
+aline sync start <host> --local <localPath> --remote <remotePath> --safe --json
+```
+
+## Troubleshooting
+
+Use this quick triage:
+
+- If you see `HOST_NOT_CONNECTED`, reconnect first.
+- If the agent keeps repeating `cd` or `conda activate`, it is probably failing to reuse the same channel correctly.
+- If `conda activate` fails, first check whether `conda` already exists in the shell before adding any conda init step.
+- If a channel ends in `Connection Lost` or `ERROR`, reconnect first, then decide whether the channel should be recreated and re-bootstrapped in Aline instead of switching to raw SSH.
+- If a channel suddenly seems to have forgotten its directory or environment, check whether state was lost and only then re-bootstrap.
+- If `CHANNEL_NOT_FOUND` appears, verify the host alias and inspect channels for that host.
+- If Aline seems to "forget" everything after you change local directories, suspect a different local daemon scope.
+- If old log lines seem missing, remember that channel logs are buffered and older output may have been pushed out.
+
+For detailed decision trees, read [troubleshooting reference](references/troubleshooting.md).
+
+## Minimal command patterns
+
+Use these patterns as the stable surface:
+
+```bash
+aline connect <host> --json
 aline status <host> --json
 aline connection list --json
+aline channel add <host> <name> --json
 aline channel list <host> --json
-```
-
-### Run a command in a named channel
-
-By default, `exec` starts the remote command and returns Aline-side execution status immediately. It does **not** wait for the remote business result in this mode. To inspect the command output later, use `log`.
-
-In most cases, prefer `--follow`: it blocks until the command completes and directly prints the remote command output.
-
-Use `--timeout` when you want a followed command to stop waiting after a specific time.
-
-Important notes:
-
-- Quote the command string so the local shell does not rewrite it before Aline sends it to the remote host.
-- `--json` gives Aline-side metadata such as channel status, execution id, and whether the request was accepted. It is not the same as the remote command's business output.
-- If you combine `--follow` and `--json`, the output is a mix of JSON metadata and plain followed output. Do **not** feed the entire stream directly into a JSON parser; extract what you need from text or parse only the JSON portion.
-- For commands that keep running or continuously print output, start them normally and inspect progress with `log --tail`.
-
-```bash
-aline exec <host> --channel <name> "<command...>"
 aline exec <host> --channel <name> --follow "<command...>"
-aline exec <host> --channel <name> --json "<command...>"
-aline exec <host> --channel <name> --json --follow "<command...>"
-```
-
-Examples:
-
-```bash
-aline exec <host> --channel test "pwd" --json
-```
-
-Example Aline-side JSON response:
-
-```json
-{
-  "status": "success",
-  "data": {
-    "name": "test",
-    "pid": null,
-    "status": "RUNNING",
-    "exitCode": null,
-    "lastActiveAt": "2026-04-16T07:52:43.455Z",
-    "executionId": 6,
-    "command": "pwd"
-  },
-  "error": null
-}
-```
-
-Followed execution prints the remote command output:
-
-```bash
-aline exec <host> --channel test --follow "pwd"
-```
-
-Example output:
-
-```text
-/home/user-name
-[exit 0]
-```
-
-Combining `--json` and `--follow` produces JSON metadata followed by plain text output:
-
-```bash
-aline exec <host> --channel test --json --follow "pwd"
-```
-
-Example output shape:
-
-```text
-{
-  "status": "success",
-  "data": {
-    "name": "test",
-    "status": "RUNNING",
-    "executionId": 8,
-    "command": "pwd"
-  },
-  "error": null
-}
-/home/user-name
-[exit 0]
-```
-
-If `error` is not null, handle it directly. For example, when the host is not connected:
-
-```bash
-aline exec host1 --channel test "pwd" --json
-```
-
-returns an error such as `HOST_NOT_CONNECTED`.
-
-Aline can create a missing channel implicitly during `exec`, but that is not the preferred workflow. It is better to create the channel explicitly first.
-
-### Inspect logs
-
-```bash
-aline log <host> <channel> --tail 200
-aline log <host> <channel> --tail 200 --json
-```
-
-### Transfer files
-
-Prefer these explicit transfer forms:
-
-```bash
-# Ensure you know the current local directory before using relative paths
+aline log <host> <name> --tail 200 --json
 aline push <host> --local <localPath> --remote <remotePath> --json
 aline pull <host> --remote <remotePath> --local <localPath> --json
-```
-
-### Start and stop sync
-
-```bash
 aline sync start <host> --local <localPath> --remote <remotePath> --json
 aline sync stop <host> --json
+aline channel delete <host> <name> --json
 ```
 
-## Transfer safety guidance
+## Short reminder
 
-Treat `push`, `pull`, and `sync start` as safety-sensitive operations.
+The default mental model is:
 
-The default behavior is mirror mode. Mirror mode can remove destination-only files so the destination matches the source exactly. If you point a transfer at the wrong directory or misunderstand the direction, you can overwrite or delete important files.
-
-Before running a transfer, confirm:
-
-- which side is the source
-- which side is the destination
-- whether the destination contains important files that must be preserved
-- whether `--safe` is a better choice than the default mirror behavior
-
-Practical guidance:
-
-- if the local directory is the source of truth and you want to preserve remote-only files, use `--safe` on `push`
-- if the remote directory is the source of truth and you want to preserve local-only files, use `--safe` on `pull`
-- if you need an exact mirror, do **not** use `--safe`, but verify the direction carefully first
-- always use Unix-style remote paths such as `~/workspace` or `/tmp/workspace`; do not use Windows-style remote paths such as `C:/...`
-
-## What to do when a workflow fails
-
-### If Aline says the host is not connected
-
-Reconnect first:
-
-```bash
-aline connect <host> --json
-```
-
-### If a transfer fails
-
-Check:
-
-- whether `--local` and `--remote` were both provided
-- whether the local path exists
-- whether the remote host is already connected
-- whether the transfer backend reported `rsync` or `tar+ssh`
-- whether you need to use an absolute local path
-- whether the remote path is written as a Unix-style path rather than a Windows path
-
-### If a long-running command looks stuck
-
-Use channel logs:
-
-```bash
-aline log <host> <channel> --tail 200 --json
-```
-
-Look for:
-
-- `[running]`
-- new output lines
-- connection loss messages
-
-### If the user mentions prompt noise or rough streaming output
-
-Explain that Aline already strips common shell prompt artifacts, but streamed output should still be verified through both:
-
-- `exec --follow`
-- `log --tail`
-
-### If Aline itself might be broken
-
-Use a minimal raw diagnostic only to isolate whether the issue is transport-level:
-
-```bash
-ssh <host> pwd
-```
-
-Do not replace the main workflow with raw SSH. In particular, do **not** use raw SSH to run business logic such as Python, Node, or Git commands. Raw SSH is only for narrow connectivity diagnostics like `pwd`.
-
-## Transfer backend notes
-
-Aline can use two transfer backends:
-
-- `rsync`
-- `tar+ssh`
-
-If local `rsync` is unavailable, Aline falls back to `tar+ssh`. That affects speed and incremental efficiency, but basic transfer functionality still works.
-
-When debugging transfer behavior, look for the backend in JSON output:
-
-- `method: "rsync"`
-- `method: "tar+ssh"`
-
-## Short example workflow
-
-For example, if the user ask you to run a fast_task.py in `my-host`, you can do like:
-
-```bash
-aline connect my-host --json
-aline channel add my-host demo --json
-aline push my-host --local ./demo/aline-test --remote ~/aline-test --json
-aline exec my-host --channel demo --follow "cd ~/aline-test && python fast_task.py"
-aline pull my-host --remote ~/aline-test --local ./demo/aline-test --json
-```
-
-the user think the results are good, then
-
-```bash
-aline channel delete my-host demo --json
-```
-
-Use that pattern as the baseline unless the user explicitly asks for a different workflow.
+- connect once
+- create one channel per continuous workflow
+- bootstrap that channel once
+- reuse its directory, environment, and variables
+- split into multiple channels when workflows should diverge
+- re-bootstrap only after state loss

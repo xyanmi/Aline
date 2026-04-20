@@ -30,9 +30,11 @@ Instead of rebuilding remote SSH workflows ad hoc for every task, Aline provides
 - explicit push / pull transfers
 - background sync for local-to-remote workflows
 
+Aline is not just a thin wrapper around one-shot SSH commands. It is most useful when an agent needs a predictable remote workflow on existing SSH-accessible Unix-like machines and wants to reuse shell state, logs, and transfers across repeated steps.
+
 ## 中文概述
 
-Aline 是一个面向agent的远程执行与同步工具。它会启动一个本地守护进程，通过 SSH 连接到远程类 Unix 主机，并为agent提供一个稳定且可脚本化的远程开发工作流。
+Aline 是一个面向agent的远程执行与同步工具。它会启动一个本地守护进程，通过 SSH 连接到远程类 Unix 主机，并为agent提供一个稳定且可脚本化的远程开发工作流。它不是单纯给 SSH 换一个命令名，而是更偏向一个可复用状态的远端工作流层。
 
 它的设计旨在减少临时 SSH 工作流中常见的问题：
 
@@ -59,11 +61,12 @@ aline --help
 aline connect <host> --json
 aline channel add <host> demo --json
 aline push <host> --local ./demo/aline-test --remote ~/aline-test --json
-aline exec <host> --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
+aline exec <host> --channel demo --follow "cd ~/aline-test"
+aline exec <host> --channel demo --follow "python fast_task.py"
 aline pull <host> --remote ~/aline-test --local ./demo/aline-test --json
 ```
 
-如果你想让 Claude 或其他智能体更稳定地使用 Aline，请安装随附的 `skills/aline/` 技能（skill）。
+如果你想让 Claude 或其他智能体更稳定地使用 Aline，请安装随附的 `skills/aline/` 技能（skill）。完整命令细节与支持边界以下方英文说明为准。
 
 ## Support boundary
 
@@ -91,7 +94,7 @@ It is especially useful when you want agents to:
 
 ### Option 1: install from npm
 
-After Aline is published, install globally:
+Install globally from npm:
 
 ```bash
 npm install -g @xyanmi/aline
@@ -123,7 +126,7 @@ node ./bin/aline --help
 
 ### Option 3: use `npx`
 
-After publishing, users can also run Aline without a global install:
+You can also run Aline without a global install:
 
 ```bash
 npx --package @xyanmi/aline aline --help
@@ -175,13 +178,23 @@ Host-bound actions require an explicit prior `connect`:
 aline connect <host>
 ```
 
-### 3. Run a command in a named channel
+### 3. Create a named channel
+
+Although `exec` can create a missing channel implicitly, explicitly creating the channel first is the recommended workflow:
+
+```bash
+aline channel add <host> setup
+```
+
+### 4. Run commands in that channel
 
 ```bash
 aline exec <host> --channel setup --follow "pwd"
 ```
 
-### 4. Inspect logs later
+Commands in the same channel reuse the same shell session, so later commands can build on earlier `cd` and environment setup.
+
+### 5. Inspect logs later
 
 ```bash
 aline log <host> setup --tail 200
@@ -295,7 +308,8 @@ Semantics:
 aline connect my-host
 aline channel add my-host demo --json
 aline push my-host --local ./demo/aline-test --remote ~/aline-test --json
-aline exec my-host --channel demo --follow "bash -lc 'cd ~/aline-test && python fast_task.py'"
+aline exec my-host --channel demo --follow "cd ~/aline-test"
+aline exec my-host --channel demo --follow "python fast_task.py"
 aline pull my-host --remote ~/aline-test --local ./demo/aline-test --json
 ```
 
@@ -309,21 +323,9 @@ Aline is designed for agents, so the repo ships a formal usage skill under `./sk
 
 ### How to install the shipped skill
 
-The recommended path is to use the built-in installer command:
+The recommended path is the built-in installer command described above, which installs the shipped skill into `~/.<agent-name>/skills/aline`.
 
-```bash
-aline skill claude
-```
-
-You can also target other agent homes, for example:
-
-```bash
-aline skill codex
-```
-
-This installs the shipped skill into `~/.<agent-name>/skills/aline`.
-
-If you prefer to do it manually, you can still copy or symlink the directory yourself.
+If you need a manual install instead, you can still copy or symlink the directory yourself.
 
 Example (copy):
 
@@ -367,6 +369,11 @@ If fallback prerequisites are missing, Aline reports the missing local executabl
 
 - `disconnect` clears the host's channels from the daemon
 - if you want to use that host again after disconnecting, reconnect first
+
+### Local daemon scope
+
+- Aline stores runtime metadata under `~/.aline`, but daemon state is scoped by the local project directory you launched it from
+- if you switch to a different local `cwd`, you may be talking to a different daemon and not see the same channels or connection state
 
 ### Remote path handling on Windows
 
