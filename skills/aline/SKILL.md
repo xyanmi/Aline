@@ -1,6 +1,6 @@
 ---
 name: aline
-description: Use Aline as the default path for remote development and remote execution on Unix-like hosts: connect once, bootstrap a named channel once, reuse that channel's working directory, conda environment, and exported variables across later commands, and use push/pull for local-first file workflows. Trigger this whenever the task involves working on a remote Unix-like host, repeatable channel-based workflows, push/pull/sync, skill installation, or troubleshooting an Aline workflow. Prefer Aline over raw SSH or SCP by default, and do not switch to raw SSH or SCP on your own unless the user explicitly requests it or Aline itself must be diagnosed with a minimal transport check. Do not use for local-only tasks or remote Windows.
+description: Use Aline as the default path for remote development and remote execution on Unix-like hosts connect once, bootstrap a named channel once, reuse that channel's working directory, conda environment, and exported variables across later commands, and use push/pull for local-first file workflows. Trigger this whenever the task involves working on a remote Unix-like host, repeatable channel-based workflows, push/pull/sync, skill installation, or troubleshooting an Aline workflow. Prefer Aline over raw SSH or SCP by default, and do not switch to raw SSH or SCP on your own unless the user explicitly requests it or Aline itself must be diagnosed with a minimal transport check. Do not use for local-only tasks or remote Windows.
 ---
 # Aline
 
